@@ -6,6 +6,7 @@ import { VoucherList } from './components/VoucherList';
 import { LoginScreen } from './components/LoginScreen';
 import { SheetsConfigModal } from './components/SheetsConfigModal';
 import { VoucherRecord, VoucherStats, VouchersResponse } from './types';
+import { fetchAllVouchersDirect } from './services/sheetsClient';
 
 export default function App() {
   // 1. Auth State
@@ -47,7 +48,7 @@ export default function App() {
     setDarkMode((prev) => !prev);
   };
 
-  // Fetch Vouchers Data from Server
+  // Fetch Vouchers Data from Server (with direct Google Sheets fallback for static hosting like Vercel)
   const fetchVouchers = useCallback(async (isManual = false) => {
     if (!token) return;
 
@@ -58,24 +59,44 @@ export default function App() {
     }
 
     try {
-      const res = await fetch('/api/vouchers', {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-      });
+      let dataLoaded = false;
 
-      if (res.status === 401) {
-        // Token expired or invalid
-        localStorage.removeItem('espacolaser_auth_token');
-        setToken(null);
-        return;
+      // Try server API first if token is server JWT
+      if (!token.startsWith('direct-session-')) {
+        try {
+          const res = await fetch('/api/vouchers', {
+            headers: {
+              Authorization: `Bearer ${token}`,
+              'Content-Type': 'application/json',
+            },
+          });
+
+          if (res.status === 401) {
+            localStorage.removeItem('espacolaser_auth_token');
+            setToken(null);
+            return;
+          }
+
+          if (res.ok) {
+            const data: VouchersResponse = await res.json();
+            if (data.success && data.records) {
+              setRecords(data.records);
+              setStats(data.stats);
+              dataLoaded = true;
+            }
+          }
+        } catch {
+          // If server / API fetch fails, fallback to direct sheets below
+        }
       }
 
-      const data: VouchersResponse = await res.json();
-      if (data.success && data.records) {
-        setRecords(data.records);
-        setStats(data.stats);
+      // If server data was not loaded (static Vercel hosting, direct-session token, or offline API), load directly from Google Sheets
+      if (!dataLoaded) {
+        const directData = await fetchAllVouchersDirect();
+        if (directData.success) {
+          setRecords(directData.records);
+          setStats(directData.stats);
+        }
       }
     } catch (err) {
       console.error('Erro ao buscar vouchers:', err);

@@ -2,5 +2,7 @@
   "name": "Voucher Digital - Espaçolaser Tianguá",
   "description": "Sistema de consulta e gestão de cadastros de vouchers de 3 e 5 sessões da Espaçolaser Tianguá com integração Google Sheets.",
   "requestFramePermissions": [],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
 }

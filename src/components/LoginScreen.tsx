@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Lock, User, ArrowRight, AlertCircle, Sparkles } from 'lucide-react';
+import { normalizeText } from '../services/sheetsClient';
 
 interface LoginScreenProps {
   onLoginSuccess: (token: string, user: string) => void;
@@ -23,6 +24,10 @@ export function LoginScreen({ onLoginSuccess, darkMode, onToggleDarkMode }: Logi
     setIsLoading(true);
     setError('');
 
+    const normalizedInputUser = normalizeText(user);
+    const isValidLocalCredentials =
+      normalizedInputUser === 'TIANGUA' && password.trim() === '3553';
+
     try {
       const res = await fetch('/api/login', {
         method: 'POST',
@@ -30,17 +35,49 @@ export function LoginScreen({ onLoginSuccess, darkMode, onToggleDarkMode }: Logi
         body: JSON.stringify({ user, password }),
       });
 
-      const data = await res.json();
-
-      if (data.success && data.token) {
-        localStorage.setItem('espacolaser_auth_token', data.token);
-        localStorage.setItem('espacolaser_user', data.user || 'Espaçolaser Tianguá');
-        onLoginSuccess(data.token, data.user || 'Espaçolaser Tianguá');
-      } else {
-        setError(data.message || 'Login ou senha incorretos.');
+      // If endpoint exists and returned JSON
+      if (res.ok) {
+        const data = await res.json();
+        if (data.success && data.token) {
+          localStorage.setItem('espacolaser_auth_token', data.token);
+          localStorage.setItem('espacolaser_user', data.user || 'Espaçolaser Tianguá');
+          onLoginSuccess(data.token, data.user || 'Espaçolaser Tianguá');
+          return;
+        }
       }
-    } catch (err) {
-      setError('Erro ao conectar ao servidor. Tente novamente.');
+
+      // If server explicitly returned 401 with JSON message
+      if (res.status === 401) {
+        try {
+          const data = await res.json();
+          setError(data.message || 'Login ou senha incorretos.');
+          return;
+        } catch {
+          // If body is not JSON (e.g. 401 HTML from proxy), continue to fallback
+        }
+      }
+
+      // If server returned 404 (static deployment on Vercel without backend server)
+      if (isValidLocalCredentials) {
+        const fallbackToken = `direct-session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem('espacolaser_auth_token', fallbackToken);
+        localStorage.setItem('espacolaser_user', 'Espaçolaser Tianguá');
+        onLoginSuccess(fallbackToken, 'Espaçolaser Tianguá');
+        return;
+      } else {
+        setError('Login ou senha incorretos.');
+        return;
+      }
+    } catch {
+      // Network error or offline / static hosting: check valid credentials
+      if (isValidLocalCredentials) {
+        const fallbackToken = `direct-session-${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+        localStorage.setItem('espacolaser_auth_token', fallbackToken);
+        localStorage.setItem('espacolaser_user', 'Espaçolaser Tianguá');
+        onLoginSuccess(fallbackToken, 'Espaçolaser Tianguá');
+      } else {
+        setError('Login ou senha incorretos.');
+      }
     } finally {
       setIsLoading(false);
     }
