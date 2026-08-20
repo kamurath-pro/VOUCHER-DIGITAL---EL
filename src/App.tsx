@@ -3,35 +3,24 @@ import { Header } from './components/Header';
 import { StatCards } from './components/StatCards';
 import { FilterAndSearch } from './components/FilterAndSearch';
 import { VoucherList } from './components/VoucherList';
-import { LoginScreen } from './components/LoginScreen';
-import { SheetsConfigModal } from './components/SheetsConfigModal';
-import { VoucherRecord, VoucherStats, VouchersResponse } from './types';
+import { VoucherRecord, VoucherStats } from './types';
 import { fetchAllVouchersDirect } from './services/sheetsClient';
 
 export default function App() {
-  // 1. Auth State
-  const [token, setToken] = useState<string | null>(() => {
-    return localStorage.getItem('espacolaser_auth_token') || null;
-  });
-  const [user, setUser] = useState<string>(() => {
-    return localStorage.getItem('espacolaser_user') || 'Espaçolaser Tianguá';
-  });
-
-  // 2. Theme State (Light by default, dark mode supported)
+  // 1. Theme State (Light by default, dark mode supported)
   const [darkMode, setDarkMode] = useState<boolean>(() => {
     const saved = localStorage.getItem('espacolaser_theme');
     if (saved) return saved === 'dark';
     return false;
   });
 
-  // 3. Data & Filter States
+  // 2. Data & Filter States
   const [records, setRecords] = useState<VoucherRecord[]>([]);
   const [stats, setStats] = useState<VoucherStats | null>(null);
   const [activeTab, setActiveTab] = useState<'todos' | '3_sessoes' | '5_sessoes'>('todos');
   const [searchTerm, setSearchTerm] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [configModalOpen, setConfigModalOpen] = useState(false);
 
   // Sync Dark Mode class with HTML document
   useEffect(() => {
@@ -48,10 +37,8 @@ export default function App() {
     setDarkMode((prev) => !prev);
   };
 
-  // Fetch Vouchers Data (loads directly from Google Sheets or API)
+  // Fetch Vouchers Data (loads directly from Google Sheets)
   const fetchVouchers = useCallback(async (isManual = false) => {
-    if (!token) return;
-
     if (isManual) {
       setIsRefreshing(true);
     } else {
@@ -59,7 +46,6 @@ export default function App() {
     }
 
     try {
-      // Direct high-speed load from Google Sheets
       const directData = await fetchAllVouchersDirect();
       if (directData && directData.success) {
         setRecords(directData.records);
@@ -71,40 +57,22 @@ export default function App() {
       setIsLoading(false);
       setIsRefreshing(false);
     }
-  }, [token]);
+  }, []);
 
-  // Initial Load when logged in
+  // Initial Load on mount
   useEffect(() => {
-    if (token) {
-      fetchVouchers();
-    }
-  }, [token, fetchVouchers]);
+    fetchVouchers();
+  }, [fetchVouchers]);
 
-  // Auto-refresh every 10 minutes (600,000 ms) as requested
+  // Auto-refresh every 10 minutes (600,000 ms)
   useEffect(() => {
-    if (!token) return;
     const TEN_MINUTES_MS = 10 * 60 * 1000;
     const interval = setInterval(() => {
       fetchVouchers(true);
     }, TEN_MINUTES_MS);
 
     return () => clearInterval(interval);
-  }, [token, fetchVouchers]);
-
-  // Handle Logout
-  const handleLogout = () => {
-    localStorage.removeItem('espacolaser_auth_token');
-    localStorage.removeItem('espacolaser_user');
-    setToken(null);
-    setRecords([]);
-    setStats(null);
-  };
-
-  // Handle Login Success
-  const handleLoginSuccess = (newToken: string, loggedUser: string) => {
-    setToken(newToken);
-    setUser(loggedUser);
-  };
+  }, [fetchVouchers]);
 
   // Filter and Search Logic
   const filteredRecords = useMemo(() => {
@@ -139,29 +107,16 @@ export default function App() {
     };
   }, [records]);
 
-  // If not authenticated, show the login screen
-  if (!token) {
-    return (
-      <LoginScreen
-        onLoginSuccess={handleLoginSuccess}
-        darkMode={darkMode}
-        onToggleDarkMode={toggleDarkMode}
-      />
-    );
-  }
-
   return (
     <div className="min-h-screen bg-slate-50 dark:bg-[#070e1c] text-slate-900 dark:text-slate-100 flex flex-col transition-colors duration-200">
       
-      {/* 1. Header with Brand, Update Status, Refresh, Theme Toggle & Logout */}
+      {/* 1. Header with Brand, Update Status, Refresh & Theme Toggle */}
       <Header
         stats={stats}
         darkMode={darkMode}
         onToggleDarkMode={toggleDarkMode}
         onRefresh={() => fetchVouchers(true)}
-        onLogout={handleLogout}
         isRefreshing={isRefreshing}
-        onOpenConfigModal={() => setConfigModalOpen(true)}
       />
 
       {/* 2. Main Content Container */}
@@ -191,13 +146,6 @@ export default function App() {
         />
 
       </main>
-
-      {/* Google Sheets Configuration Info Modal */}
-      <SheetsConfigModal
-        isOpen={configModalOpen}
-        onClose={() => setConfigModalOpen(false)}
-        stats={stats}
-      />
 
     </div>
   );
